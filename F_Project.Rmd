@@ -1,0 +1,390 @@
+---
+title: "Leeds Accidents Analysis"
+author: "Moadh Hussin"
+date: "2023-05-01"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    theme: cosmo
+    code_folding: show
+---
+
+```{r, include=FALSE}
+library(tidyverse)
+library(scales)
+library(lubridate)
+library(modelr)
+library(corrplot)
+library(nycflights13)
+library(plotly)
+library(splines)
+```
+
+
+
+
+# Introduction and description
+
+## Accidants data
+
+### Description 
+The data is provided by `data.gov.uk`. It describes road accidents across Leeds in the year `2016`. Between all datasets, this dataset was selected because it includes around `2,500 accident with 14 variable` that can be easily parsed and explored. Also, I selected this dataset because I believe that there are different questions that can be asked about the data, and that the data can provide interesting answers for my questions. The dataset includes data such as location, `date`, `time`, `road setting` and `casualty information` for each accident that transpired during the year.
+
+### Usage
+Accidents
+
+### Format/Variables
+`ref_num`: Reference number of the accident
+
+`easting`: X-coordinate of the location of the accident 
+
+`northing`: Y-coordinate of the location of the accident    
+
+`vehicle_num`: Number of vehicles involved in the accident
+
+`date`: Date of the accident
+
+`time`: Time of the accident (24h)
+
+`road_class`: Class of the road the accident took place on. All UK roads (excluding motorways) fall into the following 4 categories:
+
+A roads – major roads intended to provide large-scale transport links within or between areas
+
+B roads – roads intended to connect different areas, and to feed traffic between A roads and smaller roads on the network
+
+classified unnumbered – smaller roads intended to connect together unclassified roads with A and B roads, and often linking a housing estate or a village to the rest of the network. Similar to ‘minor roads’ on an Ordnance Survey map and sometimes known unofficially as C roads
+
+unclassified – local roads intended for local traffic. The vast majority (60%) of roads in the UK fall within this category
+
+`road_surface`: Surface of the road during the accident
+
+`light_cond`: Light conditions during the accident
+
+`weather_cond`: Weather conditions during the accident 
+
+`casualty_class` : Class of the casualty, Driver or Rider, Pedestrian, Vehicle or pillion passenger.
+
+`severity`: Degree of casualty severity
+
+`gender`: Gender of the casualty
+
+`age`: Age of the casualty
+
+`vehicle_type`: Type of vehicle involved in the accident
+
+
+### Source
+Link: https://data.world/datagov-uk/6efe5505-941f-45bf-b576-4c1e09b579a1/workspace/file?filename=2016-7.csv
+
+
+# Data parsing and import
+```{r}
+# Loading the data into R 
+Accidents <- read_csv("C:/Users/HUAWEI/Desktop/MathematicalStatSoftare/R/Data/2016-7.csv")
+
+
+colnames(Accidents) <- c("ref_num", "easting", "northing", "vehicle_num", "V5", "Date", "time", "road_class", "road_surface", "light_cond", "weather_cond", "casualty_class", "severity", "gender", "age", "vehicle_type")
+
+
+
+Accidents$road_class <- factor(Accidents$road_class)
+Accidents$road_surface <- factor(Accidents$road_surface)
+Accidents$light_cond <- factor(Accidents$light_cond)
+Accidents$weather_cond <- factor(Accidents$weather_cond)
+Accidents$casualty_class <- factor(Accidents$casualty_class)
+Accidents$severity <- factor(Accidents$severity)
+Accidents$gender <- factor(Accidents$gender)
+Accidents$vehicle_type <- factor(Accidents$vehicle_type)
+
+Accidents$Date <- dmy(Accidents$Date)
+Accidents_Date <- Accidents$Date
+
+Accidents2 <-Accidents%>%
+  select(-V5, -ref_num)
+
+Accidents2$time <- Accidents$time
+
+Time <- Accidents$time
+Time <- sprintf("%02d:%02d", Time %/% 100, Time %% 100)
+
+
+Accidents <- Accidents %>%
+  mutate( Time= Time) 
+sum(is.na(Time))
+
+```
+
+The first step of the analysis is to load the data into R and assign variable names to the columns. Additionally, the factor data type is applied to categorical variables, such as road class, road surface, light conditions, weather conditions, casualty class, severity, gender, and vehicle type. The date and time variables are parsed to date-time format for further analysis.
+
+
+```{r}
+library(corrplot)
+
+str(Accidents2)
+Accidents2$road_class <- as.numeric(Accidents2$road_class)
+Accidents2$road_surface <- as.numeric(Accidents2$road_surface)
+Accidents2$light_cond <- as.numeric(Accidents2$light_cond)
+Accidents2$weather_cond <- as.numeric(Accidents2$weather_cond)
+Accidents2$casualty_class <- as.numeric(Accidents2$casualty_class)
+Accidents2$severity <- as.numeric(Accidents2$severity)
+Accidents2$gender <- as.numeric(Accidents2$gender)
+Accidents2$vehicle_type <- as.numeric(Accidents2$vehicle_type)
+Accidents2$Date <- as.numeric(Accidents2$Date)
+
+str(Accidents2)
+corrplot(cor(Accidents2),
+  method = "color",
+  type = "upper" )
+```
+
+To identify the relationships between variables, a correlation plot is created. The correlation plot is a heat map that shows the correlations between all of the variables in the dataset. The darker the color, the stronger the correlation between two variables. The correlation plot is helpful in identifying which variables are related to each other. This plot doesn't seem to give a big help at the moment because it does not show a huge corrolating between any two variables.
+
+## Exploratory Data Analysis
+
+```{r, echo= FALSE}
+ggplot(data = Accidents, aes(x = age, color=gender)) +
+  geom_density() +
+  facet_grid(.~casualty_class)+
+   labs(x = "Age", y = "Number of Casualties", 
+        title = "Histogram of Casualties by Age and Gender", 
+        subtitle = "Data from Leeds, Accidents of 2016")
+```
+
+##### Description of Density plot:
+
+This plot displays the relationship between the number of casualties and their age for different casualty classes. By analyzing this graph, we can identify which age group is most likely to be involved in a road accident in Leeds. The plot is classified by gender, which helps us understand how the relationship differs between males and females.
+
+For both males and females, the count of casualties increases with age, with the count peaking around the mid-20s and then declining gradually. However, the male graph has a higher peak (for male pedestrians and passengers) and a sharper drop than the female graph.
+
+This plot is important because it helps us understand which type of casualty each age group is most likely to be in. Specifically, when the casualty is a driver or rider, the count rockets as age increases till the mid-30s, then falls rapidly. In contrast, the plots for pedestrians and passengers are very similar, with the only difference being that passengers have a higher peak. It is worth noting that the number of casualties between the ages of 20 and mid-50s is significantly high when the casualty is a driver or rider compared to other casualty classes. By understanding these patterns, we can develop targeted interventions to reduce road accidents and raise awareness among different age groups.
+
+## Modeling
+### What affects the number of daily accidents?
+
+we will begin by looking at the accidents rate during the week and see any patterns for the increase of accidents.
+```{r}
+
+
+ggplot(data=Accidents) +
+  geom_histogram(mapping=aes(x=time)) + 
+  scale_x_continuous(limits=c(0, 2400), breaks=seq(0, 2400, by=400),
+                      labels=c("12:00 AM", "04:00 AM","08:00 AM","12:00 PM","04:00 PM", "08:00 PM", "12:00 AM"))+ 
+  labs(x= "Time (12h)", y= "Number of Accidents by Time",
+       title= "Histogram chart of Accidents by Day Time",
+       subtitle= "Data from Leeds Accidents of 2016")
+
+```
+
+the following graph represents the number of accidents that have taken place within a certain hour throughout the entire year of 2016.We can notice a significant rise in the number of accidents between 7 -9am and and about 4-7 pm. We can use this to show that the time of the day plays a role in the number of accidents , as these hours represent work rush hours. 
+
+```{r}
+hours <- Accidents %>%
+  mutate(time = sprintf("%02d:%02d", time %/% 100, time %% 100) %>% hm() %>% hour()) %>%
+  group_by(time) %>%
+  summarise(n = n())
+
+daily <- Accidents %>% 
+  mutate(wday = wday(Date, label = TRUE))%>%
+  group_by(Date, wday) %>% 
+  summarise(n = n())
+
+daily <- daily %>% 
+  mutate(wday = wday(Date, label = TRUE))
+
+
+# Plot hourly accident
+ggplot(hours, aes(time, n)) +
+  geom_line()+
+  geom_point()+
+    labs(x= "Time (24h)", y= "Number of Accidents by Time",
+       title= " Graph of Accidents by Day Time",
+       subtitle= "Data from Leeds Accidents of 2016")
+
+
+```
+after generating this plot, I shall split the analysis time into intervals to allow myself to use them to predict the number of accidents based on the time intervals that I will choose.
+```{r}
+time_interval <- function(time) {
+  cut(time, 
+    breaks = c(-1,5, 8, 12, 16, 20, 23),
+    labels = c("late night", "early morning", "morning", "afternoon", "evening", "night") 
+  )
+}
+hours
+hours <- hours %>% 
+  mutate(time_interval = time_interval(time)) 
+
+hours %>% 
+  ggplot(aes(time, n, colour = time_interval)) +
+  geom_point(alpha = 1/3) + 
+  geom_line() +
+    labs(x= "Time (24h)", y= "Number of Accidents by Time",
+       title= " Graph of Accidents by Day Time",
+       subtitle= "Data from Leeds Accidents of 2016")
+```
+
+```{r}
+mod4 <- lm(n ~ time, data = hours)
+mod5 <- lm(n ~ time * time_interval, data = hours)
+
+hours %>% 
+  gather_residuals(without_breaks = mod4, with_breaks = mod5) %>% 
+  ggplot(aes(time, resid, colour = model)) +
+    geom_line(alpha = 0.75)+
+  geom_point()+
+    labs(x= "Time (24h)", y= "Residuals",
+       title= " Graph of Residuals of Accidents by Day Time",
+       subtitle= "Data from Leeds Accidents of 2016")
+```
+
+looking at the residuals of these suggested time intervals , the graph shows that the time of day does indeed play a big role in the number of accidents throughout the day , as suggested earlier. 
+
+### Now I will try to explore another factor that affects the number of accidents throughout the days of the week.
+
+Let's try to model the relationship between hours and count. 
+```{r}
+hours <- Accidents %>%
+  mutate(time = sprintf("%02d:%02d", time %/% 100, time %% 100) %>% hm() %>% hour()) %>%
+  group_by(time) %>%
+  summarise(n = n())
+
+mod1 <- lm(n ~ ns(time, 1), data = hours)
+mod2 <- lm(n ~ ns(time, 2), data = hours)
+mod3 <- lm(n ~ ns(time, 3), data = hours)
+mod4 <- lm(n ~ ns(time, 4), data = hours)
+mod5 <- lm(n ~ ns(time, 5), data = hours)
+mod6 <- lm(n ~ ns(time, 6), data = hours)
+
+grid <- hours %>%
+  data_grid(time = seq_range(time, n = 50, expand = 0.1)) %>%
+  gather_predictions(mod1, mod2, mod3, mod4, mod5, mod6, .pred = "Y")
+
+ggplot(hours, aes(time, n)) +
+  geom_point() +
+  geom_line(data = grid, aes(y = Y), colour = "red") +
+  facet_wrap(~ model) +
+  ggtitle("Number of accidents against Hour with predictions") +
+  ylab("Number of accidents") +
+  xlab("Hour")
+
+```
+
+
+```{r}
+
+hours <- hours %>%
+  gather_residuals(mod1, mod2, mod3, mod4, mod5, mod6)
+
+ ggplot(hours, aes(time, resid)) +
+  geom_point() + 
+  geom_hline(yintercept = 0, linetype = "dashed") + 
+
+  facet_wrap(~model) +
+  ggtitle("Residuals against Hour") +
+  ylab("Residuals") +
+  xlab("Hour")
+
+
+
+```
+
+It seems that as we increase the degrees of freedom, the better our model gets. I will stick with 6 degrees of freedom for the rest of the analysis.
+
+
+```{r}
+
+
+sum(is.na(Time))
+
+wday_hour <- Accidents %>%
+  mutate(wday = wday(Date, label = TRUE), 
+         Time = hms(paste0(Time, ":00"))) %>%
+  group_by(wday, Hour = hour(Time)) %>%
+  count()
+
+wday_hour
+
+wday_hour%>%
+ggplot( aes(Hour, n, color=wday)) +
+  geom_line() +
+  geom_point() +
+  scale_color_brewer(palette = "Set1") +
+  ggtitle("Number of accidents by hour based on day of the week") +
+  ylab("Number of accidents") +
+  xlab("Hour")
+
+```
+
+From the graph we notice that Sunday and Saturday have a different shape from the rest of the days. Both have a low count between 6 and 9 am  compared to other days,  Saturday  peaks at an earlier time compared to other days. Moreover, Saturday has a lower count between 4 and 7 pm. The rest of the days have a similar shapes and follow the same trends. I think this is because the Sunday and Saturday are weekend days.
+
+
+#### Lets use a model to understand the relationship better. 
+```{r}
+wday_hour <- Accidents %>%
+  mutate(wday = wday(Date,label =TRUE))%>%
+  mutate(Hour = sprintf("%02d:%02d", time %/% 100, time %% 100) %>% hm() %>% hour()) %>%
+  count(wday,Hour) 
+
+# Fit models and make predictions for each day of the week
+mods <- lapply(levels(wday_hour$wday), function(day) {
+  mod_D <- lm(n ~ ns(Hour, 6) * wday, data = wday_hour)
+  hour_df <- data.frame(Hour = 0:23)
+  pred_df <- data.frame(wday = day, Hour = hour_df$Hour)
+  pred_df$pred <- predict(mod_D, newdata = pred_df)
+  res_df <- wday_hour
+  res_df$dresid <- residuals(mod_D)
+  return(list(mod_D = mod_D, pred_df = pred_df, res_df = res_df))
+})
+
+# Combine predictions and data into one data frame
+df <- wday_hour %>%
+  mutate(wday = as.factor(wday)) %>%
+  select(wday, Hour, n) %>%
+  rename(actual = n) %>%
+  left_join(bind_rows(lapply(mods, function(x) x$pred_df)), by = c("wday", "Hour"))
+
+# Create the plot
+ggplot(df, aes(Hour, actual, color = wday)) +
+  geom_line() +
+  geom_point() +
+  facet_wrap(.~wday)+
+  geom_line(aes(Hour, pred, color = wday), linetype = "dashed", size = 0.9, color="black") +
+  scale_color_brewer(palette = "Set1") +
+  ggtitle("Number of accidents by hour based on day of the week") +
+  ylab("Number of accidents") +
+  xlab("Hour")
+```
+
+using `lm(n ~ ns(Hour, 6) * wday` , I have generated a linear regression model. This model fits the days of the week and elaborates the number of accidents that happen in them within the entire year. 
+
+
+```{r}
+# Plot residuals against Hour variable
+ggplot(bind_rows(lapply(mods, function(x) x$res_df)), aes(Hour, dresid, colour = wday)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_line() +
+  geom_point() +
+  ggtitle("Residuals of the model by hour and day of the week") +
+  ylab("Residuals") +
+  xlab("Hour")
+
+```
+
+After the broad analysis we come to the conclusion that the day of the week affects the time at which accidents happen. On workdays, we notice that most accidents happen between 6 and 9 am and between 4 and 7 pm while on weekends they can vary.
+Modeling the relationship between day of the week and the hour at which accidents using Hour multiplied by day of the week gives the best plot. There are a few outliers which could suggest that there is another variable that impacts the time at which accidents happen. Lastly, I found as we increase the degrees of freedom we were able to model the relationship between Hour and number of accidents better.
+
+
+## Closing Discussion
+
+From the EDA, these are the most interesting findings :
+
+The EDA reveals that the count of casualties increases with age, peaking around mid-20s and declining gradually. Male casualties have a higher peak and a sharper drop than females. The plots suggest the number of casualties between the ages of 20 and mid-50s is high when the casualty is a driver or rider compared to other casualty classes.
+
+From the model building, these are the most interesting findings :
+
+The time intervals that were suggested show an effect on the number of accidents, and it may be the most dominant factor that affects the number of accidents in Leeds. We found as we increase the degrees of freedom we we’re able to model the relationship between Hour and number of accidents better. Day of the week affects the hour at which accidents happen but there are other hidden variables that play a role.
+
+Future work I would like to do :
+
+It would be interesting to explore the impact of other variables such as road type and weather conditions on the number of accidents. Additionally, it would be useful to examine the data over a longer period to identify trends over time. Finally, machine learning algorithms could be used to predict the severity of accidents based on the variables available in the dataset.
